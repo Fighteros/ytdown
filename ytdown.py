@@ -2,7 +2,7 @@
 import os
 from datetime import datetime
 import re
-import youtube_dl
+import yt_dlp as youtube_dl
 
 # open run from dir
 __location__ = os.path.realpath(
@@ -27,8 +27,9 @@ def get_intern_links(url):
 
         print(f"({x + 1}) {i['format']} {i['ext']} {i['format_note']}")
         if (i['ext'] == 'webm' or i['ext'] == 'm4a') and (
-                i['format'] == '251 - audio only (tiny)' or i['format'] == '250 - audio only (tiny)' or i[
-            'format'] == '140 - audio only (tiny)'):
+                i['format'] == '251 - audio only (medium)' or i['format'] == '250 - audio only (low)' or i[
+            'format'] == '249 - audio only (low)'):
+            # I get links but why this condition??
             audio_list[i['format'].split(' ')[0]] = i["url"]
 
     video_quality = input('Video Quality:')
