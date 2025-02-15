@@ -1,70 +1,85 @@
-#!/usr/bin/python
+import json
 import os
-from datetime import datetime
 import re
-import yt_dlp as youtube_dl
-
-# open run from dir
-__location__ = os.path.realpath(
-    os.path.join(os.getcwd(), os.path.dirname(__file__)))
+from datetime import datetime
 
 
-# Get the best audio quality by default
-def get_best_audio(list_of_audio):
-    max_quality = 0
-    for m in list_of_audio:
-        if int(m) > max_quality:
-            max_quality = int(m)
-    return max_quality
+import yt_dlp
 
 
-# Get video internal links (stream links and quality build)
-def get_intern_links(url):
-    info = youtube_dl.YoutubeDL()
-    list_of_formats = info.extract_info(url, download=False, )
-    audio_list = {}
-    for x, i in enumerate(list_of_formats['formats']):
+# 1- Request info
+# 2- Get List of quality for a video
+# 3- extract download links and sanitize for printing
 
-        print(f"({x + 1}) {i['format']} {i['ext']} {i['format_note']}")
-        if (i['ext'] == 'webm' or i['ext'] == 'm4a') and (
-                i['format'] == '251 - audio only (medium)' or i['format'] == '250 - audio only (low)' or i[
-            'format'] == '249 - audio only (low)'):
-            # I get links but why this condition??
-            audio_list[i['format'].split(' ')[0]] = i["url"]
+def format_selector(is_audio, info):
+    """
+    Select the best video and the best audio that won't result in an mkv
+    :param isAudio : Boolean:
+    :return dicit :
+    """
 
-    video_quality = input('Video Quality:')
-    try:
-        audio_url = audio_list[str(get_best_audio(audio_list))]
-        video_url = list_of_formats['formats'][int(video_quality) - 1]['url']
-        video_title = info.extract_info(url, download=False, )['title']
-        return [audio_url, video_url, video_title]
-    except Exception as e:
-        print('Sorry error occurred check the log file')
-        open('log', 'a+').write(str(e))
+    formats = info.get('formats')
+    video_list = [x for x in formats if x.get('filesize') is not None and x.get('vcodec') != 'none']
+    best_audio = [x for x in formats if
+                  x.get('filesize') is not None and x.get('acodec') != 'none' and x.get('vcodec') == 'none']
 
+    if not is_audio:
+        best_audio_url = best_audio[-1].get('url')
+        # List video list with quality
+        for i, x in enumerate(video_list):
+            if x.get('video_ext') == 'mp4':
+                # Can create a function for get size for better unit showing (to be done)
+                print(
+                    f"({i + 1}) {x.get('format_note')}@{x.get('vcodec')} - {x.get('audio_ext')} ({round(float(x.get('filesize') / (1024 * 1024)), 2)} Mbs)")
 
-# combine and download video
-def combine_streams(audio_link, video_link, title, start='00:00:00', end=''):
-    new_title = re.sub(r'[\/:*?"<>|]', "", title)
-    if end != '':
-        t1 = datetime.strptime(start, "%H:%M:%S")
-        t2 = datetime.strptime(end, "%H:%M:%S")
-        duration = t2 - t1
-        os.system(
-            f"ffmpeg -ss {start} -i \"{video_link}\" -ss {start} -i \"{audio_link}\"  -map 0:v -map 1:a -t {duration.total_seconds()} -c:v libx264 -c:a aac \"{new_title}.mp4\" ")
+        video_qaulity = int(input('Choose quality: ')) - 1
+        return {"video_url": video_list[video_qaulity], "audio_url": best_audio_url}
+
     else:
-        os.system(
-            f"ffmpeg -ss {start} -i \"{video_link}\" -ss {start} -i \"{audio_link}\"  -map 0:v -map 1:a  -c:v libx264 -c:a aac \"{new_title}.mp4\" ")
-        # print(
-        #     f"ffmpeg -v info -stats -ss {start} -i \"{video_link}\" -ss {start} -i \"{audio_link}\"  -map 0:v -map 1:a  -c:v libx264 -c:a aac \"{new_title}.mp4\" ")
+        for i, x in enumerate(best_audio):
+            print(
+                f"({i + 1}) {x.get('format_note')}@{x.get('acodec')} - {x.get('video_ext')} ({round(float(x.get('filesize') / (1024 * 1024)), 2)} Mbs)")
 
+        audio_qaulity = int(input('Choose quality: ')) - 1
+
+        toDownload = best_audio[audio_qaulity]
+
+        format_for_opts = str(toDownload.get('format_id'))
+
+        output_name = info.get('title') + "." + toDownload.get('ext')
+
+        ydl_opts = {
+            'format': format_for_opts,
+            'outtmpl': output_name
+        }
+
+
+        return {"base_url": info.get('original_url'), "ydl_opts": ydl_opts}
+
+        # # Download the specific format
+        # with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        #     ydl.download(info.get('original_url'))
+
+# Returns a json of the info for the video requested
+def get_info(video_url):
+
+    ydl_opts = {}
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(video_url, download=False)
+
+        return json.dumps(ydl.sanitize_info(info))
 
 def part_vid():
-    print("""
-Cut video ?
-    
-    [y] yes          [n] no
-    """)
+    print("""Cut video ? [y/n]""")
+    answer = input('')
+    if answer.lower() == 'y':
+        return True
+    else:
+        return False
+
+def isAudio():
+    print('Download audio only? [y/n]')
     answer = input('')
     if answer.lower() == 'y':
         return True
@@ -72,17 +87,56 @@ Cut video ?
         return False
 
 
-# ffmpeg -ss 00:18 -i $video_url -ss 00:18 -i $audio_url -map 0:v -map 1:a -t 35 -c:v libx264 -c:a aac romanticHomicide.mp4
+def download(is_audio, format_dict,cut_video = None,  info = None, start='00:00:00', end=''):
+
+    video_link = format_dict.get('video_url').get('url')
+    audio_link = format_dict.get('audio_url')
+    yt_title = info.get('title')
+    title = re.sub(r'[\/:*?"<>|]', "", yt_title)
+    video_ext = info.get('ext')
+
+    if is_audio:
+        # Download the specific format
+        with yt_dlp.YoutubeDL(format_dict.get('ydl_opts')) as ydl:
+            ydl.download(info.get('original_url'))
+
+    if end != '':
+        t1 = datetime.strptime(start, "%H:%M:%S")
+        t2 = datetime.strptime(end, "%H:%M:%S")
+        duration = t2 - t1
+        os.system(
+            f"ffmpeg -ss {start} -i \"{video_link}\" -ss {start} -i \"{audio_link}\"  -map 0:v -map 1:a -t {duration.total_seconds()} -c:v libx264 -c:a aac \"{title}.{video_ext}\" ")
+    else:
+        os.system(
+            f"ffmpeg -ss {start} -i \"{video_link}\" -ss {start} -i \"{audio_link}\"  -map 0:v -map 1:a  -c:v libx264 -c:a aac \"{title}.{video_ext}\" ")
+
+
 def main():
-    url = input('URL: ')
-    opts = part_vid()
-    list_of_links = get_intern_links(url)
-    if opts:
+    video_url = input('Video URL: ')
+
+    is_audio = isAudio()
+    cut_video = part_vid() if not is_audio else None
+
+
+    info_data = json.loads(get_info(video_url))
+
+    format_dict = format_selector(is_audio, info_data)
+
+    if is_audio:
+        download(is_audio, format_dict, info=info_data)
+
+    if cut_video:
         start = input("Start: ")
         end = input("end: ")
-        combine_streams(list_of_links[0], list_of_links[1], list_of_links[2], start, end)
+        download(is_audio, format_dict, cut_video, info=info_data, start=start, end=end)
     else:
-        combine_streams(list_of_links[0], list_of_links[1], list_of_links[2])
+        download(is_audio, format_dict, info=info_data)
 
 
-main()
+
+
+
+
+
+if __name__ == '__main__':
+    main()
