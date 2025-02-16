@@ -24,7 +24,6 @@ def format_selector(is_audio, info):
                   x.get('filesize') is not None and x.get('acodec') != 'none' and x.get('vcodec') == 'none']
 
     if not is_audio:
-        best_audio_url = best_audio[-1].get('url')
         # List video list with quality
         for i, x in enumerate(video_list):
             if x.get('video_ext') == 'mp4':
@@ -32,8 +31,14 @@ def format_selector(is_audio, info):
                 print(
                     f"({i + 1}) {x.get('format_note')}@{x.get('vcodec')} - {x.get('audio_ext')} ({round(float(x.get('filesize') / (1024 * 1024)), 2)} Mbs)")
 
-        video_qaulity = int(input('Choose quality: ')) - 1
-        return {"video_url": video_list[video_qaulity], "audio_url": best_audio_url}
+        video_quality = int(input('Choose quality: ')) - 1
+
+        # Find suitable audio for the selected video
+        audio_ext = {'mp4': 'm4a', 'webm': 'webm'}[video_list[video_quality].get('ext')]
+        best_audio = next(f for f in formats if (
+                f.get('acodec') != 'none' and f.get('vcodec') == 'none' and f.get('ext') == audio_ext))
+
+        return {"video_url": video_list[video_quality], "audio_url": best_audio}
 
     else:
         for i, x in enumerate(best_audio):
@@ -90,7 +95,7 @@ def isAudio():
 def download(is_audio, format_dict,cut_video = None,  info = None, start='00:00:00', end=''):
 
     video_link = format_dict.get('video_url').get('url')
-    audio_link = format_dict.get('audio_url')
+    audio_link = format_dict.get('audio_url').get('url')
     yt_title = info.get('title')
     title = re.sub(r'[\/:*?"<>|]', "", yt_title)
     video_ext = info.get('ext')
@@ -105,10 +110,10 @@ def download(is_audio, format_dict,cut_video = None,  info = None, start='00:00:
         t2 = datetime.strptime(end, "%H:%M:%S")
         duration = t2 - t1
         os.system(
-            f"ffmpeg -ss {start} -i \"{video_link}\" -ss {start} -i \"{audio_link}\"  -map 0:v -map 1:a -t {duration.total_seconds()} -c:v libx264 -c:a aac \"{title}.{video_ext}\" ")
+            f"ffmpeg -ss {start} -i \"{video_link}\" -ss {start} -i \"{audio_link}\"  -map 0:v -map 1:a -t {duration.total_seconds()} -c:v libx264 -c:a aac \"{title}.mp4\" ")
     else:
         os.system(
-            f"ffmpeg -ss {start} -i \"{video_link}\" -ss {start} -i \"{audio_link}\"  -map 0:v -map 1:a  -c:v libx264 -c:a aac \"{title}.{video_ext}\" ")
+            f"ffmpeg -ss {start} -i \"{video_link}\" -ss {start} -i \"{audio_link}\"  -map 0:v -map 1:a  -c:v libx264 -c:a aac \"{title}.mp4\" ")
 
 
 def main():
